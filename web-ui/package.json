@@ -9,7 +9,12 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server.prod.js",
-    "start:dev": "node server.js"
+    "start:dev": "node server.js",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "test:e2e": "playwright test --project=chromium"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -27,7 +32,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/vite": "^4.1.13",
+    "@types/node": "^25.0.10",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",
@@ -35,7 +42,9 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
+    "playwright": "^1.57.0",
     "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.3",
     "vite": "^7.1.2"
   }
 }
