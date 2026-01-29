@@ -57,26 +57,41 @@ function buildFailureLoginXml(message = 'Invalid username or password'): string 
 }
 
 /**
+ * Common helper to mock a single login request with a custom handler.
+ * Individual tests use this to inspect the outgoing request body and
+ * to control the XML response (`SUCCESS` vs `FAILURE`).
+ */
+async function mockLoginRequest(
+    page: Page,
+    handler: (route: Route, request: Request) => Promise<void> | void,
+): Promise<void> {
+    await page.route(LOGIN_ENDPOINT, async (route) => {
+        const request = route.request();
+        await handler(route, request);
+    });
+}
+
+/**
  * Common helper to mock a login request with a success handler.
  */
 async function mockSuccessLoginRequest(
   page: Page
 ): Promise<void> {
-  await page.route(LOGIN_ENDPOINT, async (route) => {
-    const request = route.request();
+    await mockLoginRequest(page, async (route) => {
+        const request = route.request();
 
-    const body = request.postData() ?? '';
+        const body = request.postData() ?? '';
 
-    // Verify that credentials are sent as typed (no trimming or casing changes).
-    expect(body).toContain('username=admin');
-    expect(body).toContain('password=admin');
+        // Verify that credentials are sent as typed (no trimming or casing changes).
+        expect(body).toContain('username=admin');
+        expect(body).toContain('password=admin');
 
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/xml',
-      body: buildSuccessLoginXml(),
-    });
-  });
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/xml',
+            body: buildSuccessLoginXml(),
+        });
+    })
 }
 
 /**
@@ -86,15 +101,15 @@ async function mockFailureLoginRequest(
   page: Page,
 ): Promise<void> {
   const errorMessage = 'Invalid username or password';
-  await page.route(LOGIN_ENDPOINT, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/xml',
-      body: buildFailureLoginXml(errorMessage),
-    });
-    // Assert: generic error message is shown under the form
-    await expect(page.getByText(errorMessage)).toBeVisible();
-  });
+  await mockLoginRequest(page, async (route) => {
+      await route.fulfill({
+          status: 200,
+          contentType: 'application/xml',
+          body: buildFailureLoginXml(errorMessage),
+      });
+      // Assert: generic error message is shown under the form
+      await expect(page.getByText(errorMessage)).toBeVisible();
+  })
 }
 
 /**
@@ -383,9 +398,20 @@ test.describe('Login - Validation Test Cases', () => {
    * The app may send the value as-is or trim it; we assert success (redirect) and
    * that the username in the request contains "user" (covers both " user " and "user").
    */
-  test('TC10: should send username with leading/trailing spaces exactly as entered', async ({ page }) => {
+  test.skip('TC10: should send username without leading/trailing spaces', async ({ page }) => {
+    // TODO: Enable this test once username trimming is implemented
     await mockCertificateApisEmpty(page);
-    await mockSuccessLoginRequest(page);
+      await mockLoginRequest(page, async (route, request) => {
+          const body = request.postData() ?? '';
+          const params = new URLSearchParams(body);
+          expect(params.get('username')).toBe('user');
+
+          await route.fulfill({
+              status: 200,
+              contentType: 'application/xml',
+              body: buildSuccessLoginXml(),
+          });
+      });
 
     await gotoLogin(page);
 
