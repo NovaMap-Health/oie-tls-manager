@@ -313,14 +313,32 @@ test.describe('Login - Functional Test Cases', () => {
     await page.getByLabel('Username').fill('admin');
     await page.getByLabel('Password').fill('admin');
 
-    const submitBtn = getLoginSubmitButton(page);
+    let submitBtn = getLoginSubmitButton(page);
 
-    // Act: one click; then wait for loading so the button is disabled before any further clicks.
+    // Start listening for the login request before clicking (the request is sent on first
+    // click; if we waited until after the clicks we would miss it and timeout).
+    const requestPromise = page.waitForRequest(
+      (req) => req.url().includes('_login') && req.method() === 'POST',
+      { timeout: 5000 }
+    );
+
+    // Act: one click triggers submit and disables the button; then fire more clicks with
+    // force: true so they don't wait for the button to be enabled (which would deadlock).
     await submitBtn.click();
+    
+    submitBtn = getLoginSubmitButton(page);
+
     await expect(submitBtn).toHaveText(/Logging in…/i);
     await expect(submitBtn).toBeDisabled();
 
-    // Assert only one request was sent before we allow it to complete.
+    for (let i = 0; i < 4; i++) {
+      await submitBtn.click({ force: true }); // fire-and-forget: don't await
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    await requestPromise;
+
+    // Assert only one request was sent despite multiple rapid clicks.
     expect(requestCount).toBe(1);
 
     resolveLogin();
@@ -430,7 +448,19 @@ test.describe('Login - Validation Test Cases', () => {
    */
   test('TC11: should preserve exact casing for username and password in the request', async ({ page }) => {
     await mockCertificateApisEmpty(page);
-    await mockSuccessLoginRequest(page);
+    await mockLoginRequest(page, async (route, request) => {
+      const body = request.postData() ?? '';
+
+      // Username and password appear as typed. Body is URL-encoded (@ may be %40).
+      expect(body).toContain('AdminUser');
+      expect(body).toMatch(/password=CaseSensitiveP(%40|@)ss/);
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/xml',
+        body: buildSuccessLoginXml(),
+      });
+    });
 
     await gotoLogin(page);
 
@@ -453,7 +483,13 @@ test.describe('Login - Validation Test Cases', () => {
     const longPassword = 'p'.repeat(256);
 
     await mockCertificateApisEmpty(page);
-    await mockSuccessLoginRequest(page);
+    await mockLoginRequest(page, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/xml',
+        body: buildSuccessLoginXml(),
+      });
+    });
 
     await gotoLogin(page);
 
@@ -711,7 +747,16 @@ test.describe('Login - Security Test Cases', () => {
       consoleMessages.push(msg.text());
     });
 
-    await mockSuccessLoginRequest(page);
+    await mockLoginRequest(page, async (route, request) => {
+      const url = request.url();
+      expect(url.startsWith('https://')).toBeTruthy();
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/xml',
+        body: buildSuccessLoginXml(),
+      });
+    });
 
     await gotoLogin(page);
 
