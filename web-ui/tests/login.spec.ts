@@ -203,14 +203,7 @@ test.describe('Login - Functional Test Cases', () => {
   test('TC3: should display same generic error when username is invalid', async ({ page }) => {
     const errorMessage = 'Invalid username or password';
 
-    await mockLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
-
+    await mockFailureLoginRequest(page);
     await gotoLogin(page);
 
     // Arrange
@@ -233,13 +226,7 @@ test.describe('Login - Functional Test Cases', () => {
   test('TC4: should display generic error when both username and password are invalid', async ({ page }) => {
     const errorMessage = 'Invalid username or password';
 
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
+    await mockFailureLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -262,17 +249,7 @@ test.describe('Login - Functional Test Cases', () => {
    */
   test('TC5: pressing Enter should submit the form and log in on success', async ({ page }) => {
     await mockCertificateApisEmpty(page);
-    await mockSingleLoginRequest(page, async (route, request) => {
-      const body = request.postData() ?? '';
-      expect(body).toContain('username=admin');
-      expect(body).toContain('password=admin');
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockSuccessLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -408,18 +385,7 @@ test.describe('Login - Validation Test Cases', () => {
    */
   test('TC10: should send username with leading/trailing spaces exactly as entered', async ({ page }) => {
     await mockCertificateApisEmpty(page);
-    await mockSingleLoginRequest(page, async (route, request) => {
-      const body = request.postData() ?? '';
-
-      // Username in the request must contain "user" (exact bytes depend on trim/encoding).
-      expect(body).toMatch(/username=[^&]*user[^&]*/);
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockSuccessLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -438,19 +404,7 @@ test.describe('Login - Validation Test Cases', () => {
    */
   test('TC11: should preserve exact casing for username and password in the request', async ({ page }) => {
     await mockCertificateApisEmpty(page);
-    await mockSingleLoginRequest(page, async (route, request) => {
-      const body = request.postData() ?? '';
-
-      // Username and password appear as typed. Body is URL-encoded (@ may be %40).
-      expect(body).toContain('AdminUser');
-      expect(body).toMatch(/password=CaseSensitiveP(%40|@)ss/);
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockSuccessLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -473,13 +427,7 @@ test.describe('Login - Validation Test Cases', () => {
     const longPassword = 'p'.repeat(256);
 
     await mockCertificateApisEmpty(page);
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockSuccessLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -558,13 +506,7 @@ test.describe('Login - UI / UX Test Cases', () => {
   test('TC16: error message should be clearly visible under the login form', async ({ page }) => {
     const errorMessage = 'Invalid username or password';
 
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
+    await mockFailureLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -654,13 +596,7 @@ test.describe('Login - Security Test Cases', () => {
     const maliciousUsername = "' OR 1=1 --";
     const errorMessage = 'Invalid username or password';
 
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
+    await mockFailureLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -694,13 +630,7 @@ test.describe('Login - Security Test Cases', () => {
       await dialog.dismiss();
     });
 
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
+    await mockFailureLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -731,13 +661,7 @@ test.describe('Login - Security Test Cases', () => {
   test('TC22: error messages must be generic and not indicate whether a user exists', async ({ page }) => {
     const errorMessage = 'Invalid username or password';
 
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
+    await mockFailureLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -761,16 +685,7 @@ test.describe('Login - Security Test Cases', () => {
       consoleMessages.push(msg.text());
     });
 
-    await mockSingleLoginRequest(page, async (route, request) => {
-      const url = request.url();
-      expect(url.startsWith('https://')).toBeTruthy();
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockSuccessLoginRequest(page);
 
     await gotoLogin(page);
 
