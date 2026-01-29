@@ -355,9 +355,7 @@ test.describe('Login - Validation Test Cases', () => {
    */
   test('TC7: should show validation error and not call API when username is empty', async ({ page }) => {
     // Any attempt to call the backend here would violate the validation rule.
-    await page.route(LOGIN_ENDPOINT, async () => {
-      throw new Error('Login API should not be called when username is empty');
-    });
+    mockErrorLoginRequest(page, 'Login API should not be called when username is empty');
 
     await gotoLogin(page);
 
@@ -419,17 +417,17 @@ test.describe('Login - Validation Test Cases', () => {
   test.skip('TC10: should send username without leading/trailing spaces', async ({ page }) => {
     // TODO: Enable this test once username trimming is implemented
     await mockCertificateApisEmpty(page);
-      await mockLoginRequest(page, async (route, request) => {
-          const body = request.postData() ?? '';
-          const params = new URLSearchParams(body);
-          expect(params.get('username')).toBe('user');
+    await mockLoginRequest(page, async (route, request) => {
+      const body = request.postData() ?? '';
+      const params = new URLSearchParams(body);
+      expect(params.get('username')).toBe('user');
 
-          await route.fulfill({
-              status: 200,
-              contentType: 'application/xml',
-              body: buildSuccessLoginXml(),
-          });
+      await route.fulfill({
+          status: 200,
+          contentType: 'application/xml',
+          body: buildSuccessLoginXml(),
       });
+    });
 
     await gotoLogin(page);
 
@@ -655,7 +653,7 @@ test.describe('Login - Security Test Cases', () => {
    * - Backend rejects the login and the UI shows a generic error.
    */
   test('TC19: SQL injection-like username should not bypass authentication', async ({ page }) => {
-    const maliciousUsername = "' OR 1=1 --";
+    const specialCharactersUsername = "abc123!@# $%^ *();';[]./";
     const errorMessage = 'Invalid username or password';
 
     await mockFailureLoginRequest(page);
@@ -705,17 +703,6 @@ test.describe('Login - Security Test Cases', () => {
   });
 
   /**
-   * TC21 – Rate limiting.
-   * Proper rate limiting (e.g. account lockouts, CAPTCHAs) is enforced server-side.
-   * Because these tests mock the backend, we document the intended behavior and
-   * skip this test until a concrete server-side contract is exposed to the UI.
-   */
-  test.skip('TC21: multiple failed attempts should eventually trigger server-side rate limiting (documented only)', async () => {
-    // Intentionally left as documentation-only. Implement once the backend
-    // surfaces lockout/captcha state through the login API contract.
-  });
-
-  /**
    * TC22 – Error message does not reveal user existence.
    * Verified by checking that the same generic message is used for obviously
    * invalid usernames and for valid-looking usernames.
@@ -747,28 +734,33 @@ test.describe('Login - Security Test Cases', () => {
       consoleMessages.push(msg.text());
     });
 
-    await mockLoginRequest(page, async (route, request) => {
-      const url = request.url();
-      expect(url.startsWith('https://')).toBeTruthy();
+      await mockLoginRequest(page, async (route) => {
+          const request = route.request();
 
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+          const body = request.postData() ?? '';
+
+          // Verify that credentials are sent as typed (no trimming or casing changes).
+          expect(body).toContain('username=admin');
+          expect(body).toMatch(/password=some_long_complex_password_123(%21|!)(%40|@)(%23|#)/);
+
+          await route.fulfill({
+              status: 200,
+              contentType: 'application/xml',
+              body: buildSuccessLoginXml(),
+          });
+      })
 
     await gotoLogin(page);
 
     await page.getByLabel('Username').fill('admin');
-    await page.getByLabel('Password').fill('admin');
+    await page.getByLabel('Password').fill('some_long_complex_password_123!@#');
     await getLoginSubmitButton(page).click();
 
     // Wait for login to complete so any app console output has been emitted.
     await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
 
     const joined = consoleMessages.join('\n');
-    expect(joined.includes('password=admin')).toBe(false);
+    expect(joined.includes('some_long_complex_password_123!@#')).toBe(false);
   });
 });
 
