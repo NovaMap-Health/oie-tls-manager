@@ -57,17 +57,43 @@ function buildFailureLoginXml(message = 'Invalid username or password'): string 
 }
 
 /**
- * Common helper to mock a single login request with a custom handler.
- * Individual tests use this to inspect the outgoing request body and
- * to control the XML response (`SUCCESS` vs `FAILURE`).
+ * Common helper to mock a login request with a success handler.
  */
-async function mockSingleLoginRequest(
-  page: Page,
-  handler: (route: Route, request: Request) => Promise<void> | void,
+async function mockSuccessLoginRequest(
+  page: Page
 ): Promise<void> {
   await page.route(LOGIN_ENDPOINT, async (route) => {
     const request = route.request();
-    await handler(route, request);
+
+    const body = request.postData() ?? '';
+
+    // Verify that credentials are sent as typed (no trimming or casing changes).
+    expect(body).toContain('username=admin');
+    expect(body).toContain('password=admin');
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/xml',
+      body: buildSuccessLoginXml(),
+    });
+  });
+}
+
+/**
+ * Common helper to mock a login request with a failure handler.
+ */
+async function mockFailureLoginRequest(
+  page: Page,
+): Promise<void> {
+  const errorMessage = 'Invalid username or password';
+  await page.route(LOGIN_ENDPOINT, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/xml',
+      body: buildFailureLoginXml(errorMessage),
+    });
+    // Assert: generic error message is shown under the form
+    await expect(page.getByText(errorMessage)).toBeVisible();
   });
 }
 
@@ -118,19 +144,7 @@ test.describe('Login - Functional Test Cases', () => {
    */
   test('TC1: should authenticate and redirect to dashboard on successful login', async ({ page }) => {
     await mockCertificateApisEmpty(page);
-    await mockSingleLoginRequest(page, async (route, request) => {
-      const body = request.postData() ?? '';
-
-      // Verify that credentials are sent as typed (no trimming or casing changes).
-      expect(body).toContain('username=admin');
-      expect(body).toContain('password=admin');
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockSuccessLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -145,7 +159,9 @@ test.describe('Login - Functional Test Cases', () => {
     await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
 
     // Assert: dashboard has loaded — toolbar or tab shows TLS store content.
-    await expect(page.getByText(/Native Java Certificate Store|Additional Trusted|Local Key Pairs/i).first()).toBeVisible();
+    await expect(page.getByText(/Native Java Certificate Store/i).first()).toBeVisible();
+    await expect(page.getByText(/Additional Trusted Certificates/i).first()).toBeVisible();
+    await expect(page.getByText(/Local Key Pairs/i).first()).toBeVisible();
 
     // Assert: AuthContext persisted the authenticated state to localStorage.
     const isAuthenticated = await page.evaluate(() => localStorage.getItem('auth:isAuthenticated'));
@@ -159,15 +175,7 @@ test.describe('Login - Functional Test Cases', () => {
    * - User stays on `/login` and is not authenticated.
    */
   test('TC2: should show generic error and stay on login when password is invalid', async ({ page }) => {
-    const errorMessage = 'Invalid username or password';
-
-    await mockSingleLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildFailureLoginXml(errorMessage),
-      });
-    });
+    await mockFailureLoginRequest(page);
 
     await gotoLogin(page);
 
@@ -182,9 +190,6 @@ test.describe('Login - Functional Test Cases', () => {
     // Assert: stays on login page
     await expect(page).toHaveURL(/\/tls-manager\/login(\?|$)/);
 
-    // Assert: generic error message is shown under the form
-    await expect(page.getByText(errorMessage)).toBeVisible();
-
     // Assert: user remains unauthenticated
     const isAuthenticated = await page.evaluate(() => localStorage.getItem('auth:isAuthenticated'));
     expect(isAuthenticated === null || isAuthenticated === 'false').toBeTruthy();
@@ -198,7 +203,7 @@ test.describe('Login - Functional Test Cases', () => {
   test('TC3: should display same generic error when username is invalid', async ({ page }) => {
     const errorMessage = 'Invalid username or password';
 
-    await mockSingleLoginRequest(page, async (route) => {
+    await mockLoginRequest(page, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/xml',
