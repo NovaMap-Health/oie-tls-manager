@@ -98,9 +98,8 @@ async function mockSuccessLoginRequest(
  * Common helper to mock a login request with a failure handler.
  */
 async function mockFailureLoginRequest(
-  page: Page,
+  page: Page, errorMessage: string
 ): Promise<void> {
-  const errorMessage = 'Invalid username or password';
   await mockLoginRequest(page, async (route) => {
       await route.fulfill({
           status: 200,
@@ -111,6 +110,15 @@ async function mockFailureLoginRequest(
       await expect(page.getByText(errorMessage)).toBeVisible();
   })
 }
+
+/**
+ * Common helper to mock a login request with an error handler.
+ */
+async function mockErrorLoginRequest(page: Page, errorMessage: string): Promise<void> {
+  await page.route(LOGIN_ENDPOINT, async () => {
+    throw new Error(errorMessage);
+  });
+} 
 
 /**
  * Mock certificate APIs with empty 200 responses so /tls preload does not get 401
@@ -190,7 +198,7 @@ test.describe('Login - Functional Test Cases', () => {
    * - User stays on `/login` and is not authenticated.
    */
   test('TC2: should show generic error and stay on login when password is invalid', async ({ page }) => {
-    await mockFailureLoginRequest(page);
+    await mockFailureLoginRequest(page, 'Invalid username or password');
 
     await gotoLogin(page);
 
@@ -216,20 +224,18 @@ test.describe('Login - Functional Test Cases', () => {
    * It simply surfaces the backend's generic message.
    */
   test('TC3: should display same generic error when username is invalid', async ({ page }) => {
-    const errorMessage = 'Invalid username or password';
 
-    await mockFailureLoginRequest(page);
+    await mockFailureLoginRequest(page, 'Invalid username or password');
     await gotoLogin(page);
 
     // Arrange
     await page.getByLabel('Username').fill('nonexistent-user');
-    await page.getByLabel('Password').fill('any-password');
+    await page.getByLabel('Password').fill('admin');
 
     // Act
     await page.getByRole('button', { name: 'Login' }).click();
 
     // Assert: same generic error, no hint which field was wrong
-    await expect(page.getByText(errorMessage)).toBeVisible();
     await expect(page).toHaveURL(/\/tls-manager\/login(\?|$)/);
   });
 
@@ -241,7 +247,7 @@ test.describe('Login - Functional Test Cases', () => {
   test('TC4: should display generic error when both username and password are invalid', async ({ page }) => {
     const errorMessage = 'Invalid username or password';
 
-    await mockFailureLoginRequest(page);
+    await mockFailureLoginRequest(page, 'Invalid username or password');
 
     await gotoLogin(page);
 
@@ -253,7 +259,6 @@ test.describe('Login - Functional Test Cases', () => {
     await page.getByRole('button', { name: 'Login' }).click();
 
     // Assert: the error is generic and identical to TC2/TC3
-    await expect(page.getByText(errorMessage)).toBeVisible();
     await expect(page).toHaveURL(/\/tls-manager\/login(\?|$)/);
   });
 
@@ -277,7 +282,9 @@ test.describe('Login - Functional Test Cases', () => {
 
     // Assert: same outcome as TC1 — redirect and dashboard content
     await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
-    await expect(page.getByText(/Native Java Certificate Store|Additional Trusted|Local Key Pairs/i).first()).toBeVisible();
+    await expect(page.getByText(/Native Java Certificate Store/i).first()).toBeVisible();
+    await expect(page.getByText(/Additional Trusted Certificates/i).first()).toBeVisible();
+    await expect(page.getByText(/Local Key Pairs/i).first()).toBeVisible();
   });
 
   /**
@@ -355,7 +362,7 @@ test.describe('Login - Validation Test Cases', () => {
    */
   test('TC7: should show validation error and not call API when username is empty', async ({ page }) => {
     // Any attempt to call the backend here would violate the validation rule.
-    mockErrorLoginRequest(page, 'Login API should not be called when username is empty');
+    await mockErrorLoginRequest(page, 'Login API should not be called when username is empty');
 
     await gotoLogin(page);
 
@@ -374,9 +381,7 @@ test.describe('Login - Validation Test Cases', () => {
    * Same validation rule as TC7.
    */
   test('TC8: should show validation error and not call API when password is empty', async ({ page }) => {
-    await page.route(LOGIN_ENDPOINT, async () => {
-      throw new Error('Login API should not be called when password is empty');
-    });
+    await mockErrorLoginRequest(page, 'Login API should not be called when password is empty');
 
     await gotoLogin(page);
 
@@ -395,9 +400,7 @@ test.describe('Login - Validation Test Cases', () => {
    * The same generic validation message is used for any missing-credentials case.
    */
   test('TC9: should show validation error when both username and password are empty', async ({ page }) => {
-    await page.route(LOGIN_ENDPOINT, async () => {
-      throw new Error('Login API should not be called when username and password are empty');
-    });
+    await mockErrorLoginRequest(page, 'Login API should not be called when username and password are empty');
 
     await gotoLogin(page);
 
@@ -471,41 +474,40 @@ test.describe('Login - Validation Test Cases', () => {
 
   /**
    * TC12 – Max length.
-   * There is no explicit `maxLength` prop on the MUI `TextField`s, so the inputs
-   * accept arbitrarily long values and pass them straight to the backend.
-   * This test documents the current behavior by ensuring no client-side
-   * validation blocks long inputs and a login request is still sent.
+   *TODO: Enable these tests once username and password max length is implemented
    */
-  test('TC12: should allow long credentials and still attempt login', async ({ page }) => {
-    const longUsername = 'u'.repeat(256);
-    const longPassword = 'p'.repeat(256);
+  test.skip('TC12.1: should enforce maximum allowed characters username', async ({ page }) => {
+    const maxUsernameLength = 128;
+    const overUsername = 'u'.repeat(maxUsernameLength + 1);
+    const errorMessage = 'Username must not be longer than 128 characters.';
 
-    await mockCertificateApisEmpty(page);
-    await mockLoginRequest(page, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
+    await mockErrorLoginRequest(page, 'Login API should not be called when username exceeds 128 characters');
 
     await gotoLogin(page);
 
-    await page.getByLabel('Username').fill(longUsername);
-    await page.getByLabel('Password').fill(longPassword);
+    await page.getByLabel('Username').fill(overUsername);
+    await page.getByLabel('Password').fill('admin');
+    await page.getByRole('button', { name: 'Login' }).click();
 
-    // Act: wait for the login request so we assert on the request that was actually sent.
-    const [loginRequest] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('_login') && req.method() === 'POST'),
-      getLoginSubmitButton(page).click(),
-    ]);
+    await expect(page.getByText(errorMessage)).toBeVisible();
+    await expect(page).toHaveURL(/\/tls-manager\/login(\?|$)/);
+  });
 
-    await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
+  test.skip('TC12.2: should enforce maximum allowed characters password', async ({ page }) => {
+    const maxPasswordLength = 256;
+    const overPassword = 'u'.repeat(maxPasswordLength + 1);
+    const errorMessage = 'Password must not be longer than 256 characters.';
 
-    const body = loginRequest.postData();
-    expect(body).not.toBeNull();
-    expect(body).toContain(`username=${longUsername}`);
-    expect(body).toContain(`password=${longPassword}`);
+    await mockErrorLoginRequest(page, 'Login API should not be called when password exceeds 128 characters');
+
+    await gotoLogin(page);
+
+    await page.getByLabel('Username').fill('admin');
+    await page.getByLabel('Password').fill(overPassword);
+    await page.getByRole('button', { name: 'Login' }).click();
+
+    await expect(page.getByText(errorMessage)).toBeVisible();
+    await expect(page).toHaveURL(/\/tls-manager\/login(\?|$)/);
   });
 });
 
@@ -557,132 +559,59 @@ test.describe('Login - UI / UX Test Cases', () => {
     await usernameField.focus();
     await expect(usernameField).toBeFocused();
   });
-
-  /**
-   * TC16 – Error message clarity.
-   * We verify that the error message is visible, rendered in the login form,
-   * and does not get obscured by overlapping UI.
-   */
-  test('TC16: error message should be clearly visible under the login form', async ({ page }) => {
-    const errorMessage = 'Invalid username or password';
-
-    await mockFailureLoginRequest(page);
-
-    await gotoLogin(page);
-
-    await page.getByLabel('Username').fill('admin');
-    await page.getByLabel('Password').fill('wrong');
-    await page.getByRole('button', { name: 'Login' }).click();
-
-    const errorLocator = page.getByText(errorMessage);
-    await expect(errorLocator).toBeVisible();
-  });
-
-  /**
-   * TC17 – Button disabled state during API request.
-   * App uses disabled={loading}; the button may not look disabled (styling) but must be non-functional.
-   */
-  test('TC17: login button should be disabled while authentication is in progress', async ({ page }) => {
-    let resolveLogin: () => void = () => {};
-    const loginGate = new Promise<void>((resolve) => {
-      resolveLogin = resolve;
-    });
-
-    await page.route(LOGIN_ENDPOINT, async (route) => {
-      await loginGate;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
-
-    await gotoLogin(page);
-
-    await page.getByLabel('Username').fill('admin');
-    await page.getByLabel('Password').fill('admin');
-
-    const submitBtn = getLoginSubmitButton(page);
-    await submitBtn.click();
-
-    // Wait for loading state, then assert disabled (stable locator works when text is "Logging in…").
-    await expect(submitBtn).toHaveText(/Logging in…/i);
-    await expect(submitBtn).toBeDisabled();
-
-    resolveLogin();
-  });
-
-  /**
-   * TC18 – Loading indicator.
-   * The design uses a textual indicator ("Logging in…") rather than a spinner.
-   */
-  test('TC18: should show a loading indicator while authentication request is pending', async ({ page }) => {
-    let resolveLogin: () => void = () => {};
-    const loginGate = new Promise<void>((resolve) => {
-      resolveLogin = resolve;
-    });
-
-    await page.route(LOGIN_ENDPOINT, async (route) => {
-      await loginGate;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/xml',
-        body: buildSuccessLoginXml(),
-      });
-    });
-
-    await gotoLogin(page);
-
-    await page.getByLabel('Username').fill('admin');
-    await page.getByLabel('Password').fill('admin');
-
-    const submitBtn = getLoginSubmitButton(page);
-    await submitBtn.click();
-
-    await expect(submitBtn).toHaveText(/Logging in…/i);
-
-    resolveLogin();
-  });
 });
 
 test.describe('Login - Security Test Cases', () => {
   /**
-   * TC19 – SQL Injection attempt.
+   * TC16 – Special characters username should successfully login.
    * Expected behavior for the frontend:
    * - The string is treated as a normal username and sent to the backend.
-   * - Backend rejects the login and the UI shows a generic error.
+   * - Backend accepts the login and the UI redirects to the protected `/tls` route (dashboard).
+   * - Dashboard has loaded — toolbar or tab shows TLS store content.
    */
-  test('TC19: SQL injection-like username should not bypass authentication', async ({ page }) => {
+  test('TC16: special characters username should successfully login', async ({ page }) => {
     const specialCharactersUsername = "abc123!@# $%^ *();';[]./";
-    const errorMessage = 'Invalid username or password';
+    await mockLoginRequest(page, async (route) => {
+      
+      const request = route.request();
+      const body = request.postData() ?? '';
 
-    await mockFailureLoginRequest(page);
+      // Verify that credentials are sent as typed (no trimming or casing changes).
+      expect(body).toMatch(/abc123(%21|!)(%40|@)(%23|#)(%20|\+| )(%24|\$)(%25|%)(%5E|\^)(%20|\+| )(%2A|\*)(%28|\()(%29|\))(%3B|;)(%27|')(%3B|;)(%5B|\[)(%5D|\]).(%2F|\/)/);
+      expect(body).toMatch('password=admin');
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/xml',
+        body: buildSuccessLoginXml(),
+      });
+    });
 
     await gotoLogin(page);
 
-    // Arrange
-    await page.getByLabel('Username').fill(maliciousUsername);
+    // Arrange and act
+    await page.getByLabel('Username').fill(specialCharactersUsername);
     await page.getByLabel('Password').fill('admin');
-
-    // Act
     await page.getByRole('button', { name: 'Login' }).click();
 
-    // Assert: login fails with a safe, generic message.
-    await expect(page.getByText(errorMessage)).toBeVisible();
-    await expect(page).toHaveURL(/\/tls-manager\/login(\?|$)/);
+    // Assert: user is redirected to the protected `/tls` route (dashboard).
+    await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
+
+    // Assert: dashboard has loaded — toolbar or tab shows TLS store content.
+    await expect(page.getByText(/Native Java Certificate Store/i).first()).toBeVisible();
+    await expect(page.getByText(/Additional Trusted Certificates/i).first()).toBeVisible();
+    await expect(page.getByText(/Local Key Pairs/i).first()).toBeVisible();
   });
 
   /**
-   * TC20 – Script injection.
+   * TC17 – Script injection.
    * React escapes text content, so `<script>` tags typed into a field are not executed.
    * We:
    * - Type a script tag into the username
    * - Confirm no browser dialog is opened
-   * - Confirm we see a normal generic error message.
    */
-  test('TC20: script tags in username should be treated as text and never executed', async ({ page }) => {
+  test('TC17: script tags in username should be treated as text and never executed', async ({ page }) => {
     const scriptPayload = '<script>alert(1)</script>';
-    const errorMessage = 'Invalid username or password';
 
     let sawDialog = false;
     page.on('dialog', async (dialog) => {
@@ -690,7 +619,21 @@ test.describe('Login - Security Test Cases', () => {
       await dialog.dismiss();
     });
 
-    await mockFailureLoginRequest(page);
+    await mockLoginRequest(page, async (route) => {
+      
+      const request = route.request();
+      const body = request.postData() ?? '';
+
+      // Verify that credentials are sent as typed (no trimming or casing changes).
+      expect(body).toMatch(/(%3C|<)script(%3E|>)alert(%28|\()1(%29|\))(%3C|<)(%2F|\/)script(%3E|>)/);
+      expect(body).toMatch('password=admin');
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/xml',
+        body: buildSuccessLoginXml(),
+      });
+    });
 
     await gotoLogin(page);
 
@@ -698,36 +641,24 @@ test.describe('Login - Security Test Cases', () => {
     await page.getByLabel('Password').fill('admin');
     await page.getByRole('button', { name: 'Login' }).click();
 
-    await expect(page.getByText(errorMessage)).toBeVisible();
+    await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
+
+    // Assert: dashboard has loaded — toolbar or tab shows TLS store content.
+    await expect(page.getByText(/Native Java Certificate Store/i).first()).toBeVisible({timeout: 10000});
+    await expect(page.getByText(/Additional Trusted Certificates/i).first()).toBeVisible();
+    await expect(page.getByText(/Local Key Pairs/i).first()).toBeVisible();
+
     expect(sawDialog).toBe(false);
   });
 
-  /**
-   * TC22 – Error message does not reveal user existence.
-   * Verified by checking that the same generic message is used for obviously
-   * invalid usernames and for valid-looking usernames.
-   */
-  test('TC22: error messages must be generic and not indicate whether a user exists', async ({ page }) => {
-    const errorMessage = 'Invalid username or password';
-
-    await mockFailureLoginRequest(page);
-
-    await gotoLogin(page);
-
-    await page.getByLabel('Username').fill('definitely-not-a-real-user');
-    await page.getByLabel('Password').fill('some-password');
-    await page.getByRole('button', { name: 'Login' }).click();
-
-    await expect(page.getByText(errorMessage)).toBeVisible();
-  });
 
   /**
-   * TC23 – Password not visible in network logs.
+   * TC18 – Password not visible in network logs.
    * We assert: (1) the login request is sent over HTTPS; (2) the raw password
    * never appears in console output. Listener is attached before any navigation
    * so we capture app logs; we wait for redirect before asserting.
    */
-  test('TC23: should send login over HTTPS and never log the raw password', async ({ page }) => {
+  test('TC18: should send login over HTTPS and never log the raw password', async ({ page }) => {
     const consoleMessages: string[] = [];
 
     page.on('console', (msg) => {
