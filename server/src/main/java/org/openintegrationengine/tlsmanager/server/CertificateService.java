@@ -10,6 +10,7 @@ import com.mirth.connect.connectors.http.HttpDispatcherProperties;
 import com.mirth.connect.connectors.tcp.TcpDispatcherProperties;
 import com.mirth.connect.connectors.ws.WebServiceDispatcherProperties;
 import com.mirth.connect.donkey.model.channel.ConnectorPluginProperties;
+import com.mirth.connect.donkey.model.channel.ConnectorProperties;
 import com.mirth.connect.model.Channel;
 import com.mirth.connect.model.Connector;
 import com.mirth.connect.server.controllers.ChannelController;
@@ -149,7 +150,7 @@ public final class CertificateService {
 
             if (externalKeyStore.isKeyEntry(alias)) {
                 var certChain = externalKeyStore.getCertificateChain(alias);
-                var privateKey = externalKeyStore.getKey(alias, new char[0]);
+                var privateKey = externalKeyStore.getKey(alias, extraKeyStoreBackend.loadPassword());
 
                 keystore.setKeyEntry(
                     alias,
@@ -277,27 +278,35 @@ public final class CertificateService {
         };
 
         for (Channel channel : channels) {
-            Set<ConnectorPluginProperties> sourceProperties = channel.getSourceConnector().getProperties().getPluginProperties();
+            ConnectorProperties connectorProperties = channel.getSourceConnector().getProperties();
 
-            if (sourceProperties != null && !sourceProperties.isEmpty()) {
-                TLSConnectorProperties tlsSourceProperties = (TLSConnectorProperties) sourceProperties
-                    .stream()
-                    .filter(props -> props instanceof TLSConnectorProperties)
-                    .findFirst()
-                    .orElse(null);
+            if (connectorProperties != null) {
+                Set<ConnectorPluginProperties> sourceProperties = connectorProperties.getPluginProperties();
 
-                addIfInUse.accept(tlsSourceProperties, channel.getName());
+                if (sourceProperties != null && !sourceProperties.isEmpty()) {
+                    TLSConnectorProperties tlsSourceProperties = (TLSConnectorProperties) sourceProperties
+                        .stream()
+                        .filter(props -> props instanceof TLSConnectorProperties)
+                        .findFirst()
+                        .orElse(null);
+
+                    addIfInUse.accept(tlsSourceProperties, channel.getName());
+                }
             }
             for (Connector destinationConnector : channel.getDestinationConnectors()) {
-                Set<ConnectorPluginProperties> destinationProperties = destinationConnector.getProperties().getPluginProperties();
+                ConnectorProperties destinationConnectorProperties = destinationConnector.getProperties();
 
-                TLSConnectorProperties tlsDestinationProperties = (TLSConnectorProperties) destinationProperties
-                    .stream()
-                    .filter(props -> props instanceof TLSConnectorProperties)
-                    .findFirst()
-                    .orElse(null);
+                if (connectorProperties != null) {
+                    Set<ConnectorPluginProperties> destinationProperties = destinationConnectorProperties.getPluginProperties();
 
-                addIfInUse.accept(tlsDestinationProperties, channel.getName());
+                    TLSConnectorProperties tlsDestinationProperties = (TLSConnectorProperties) destinationProperties
+                        .stream()
+                        .filter(props -> props instanceof TLSConnectorProperties)
+                        .findFirst()
+                        .orElse(null);
+
+                    addIfInUse.accept(tlsDestinationProperties, channel.getName());
+                }
             }
         }
         return channelsInUse;

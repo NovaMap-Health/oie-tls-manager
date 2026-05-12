@@ -43,7 +43,7 @@ chmod +x docker-scripts.sh
 You can customize the application behavior using environment variables:
 
 - `PORT`: Port to run the server on (default: 3000)
-- `API_TARGET`: Backend API URL to proxy requests to (default: https://oie-test.quantis.health)
+- `API_TARGET`: Backend API URL to proxy requests to (default: https://localhost:8443)
 
 ### Example with Custom API Target
 ```bash

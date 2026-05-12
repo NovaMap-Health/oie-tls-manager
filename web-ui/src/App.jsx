@@ -9,9 +9,15 @@ import TlsManagement from './pages/TlsManagement'
 export default function App() {
   const { isAuthenticated } = useAuth()
 
+  const getBasename = () => {
+    const path = window.location.pathname;
+    const idx = path.indexOf('/tls-manager');
+    return idx !== -1 ? path.substring(0, idx + '/tls-manager'.length) : '/tls-manager';
+  };
+
   return (
     <NotificationProvider>
-      <BrowserRouter basename="/tls-manager">
+      <BrowserRouter basename={getBasename()}>
         <Routes>
           <Route
             path="/login"

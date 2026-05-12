@@ -14,13 +14,13 @@ A React + Vite + MUI + Tailwind v4 dashboard for managing certificate stores and
 # Install dependencies
 npm install
 
-# Start dev server (http://localhost:5173/dashboard)
+# Start dev server (http://localhost:5173/tls-manager)
 npm run dev
 
 # Lint
 npm run lint
 
-# Build static assets (output in ./dashboard)
+# Build static assets (output in ./tls-manager)
 npm run build
 
 # Preview production build
@@ -29,12 +29,12 @@ npm run preview
 
 ### Environment
 - Create a `.env` file if needed:
-  - `VITE_API_BASE_URL=https://oie-test.quantis.health/api`
+  - `VITE_API_BASE_URL=https://localhost:8443/api`
 
 Axios is configured with `withCredentials=true`, so successful login at `/users/_login` will set the `JSESSIONID` cookie in the browser (CORS must allow credentials).
 
 ## Routing & Auth
-- BrowserRouter `basename` is `/dashboard`.
+- BrowserRouter `basename` is `/tls-manager`.
 - Routes:
   - `/login` (public)
   - `/tls` (protected)
@@ -76,12 +76,12 @@ Axios is configured with `withCredentials=true`, so successful login at `/users/
 - Replace with a real API by switching the implementation in `tlsService.js` to use Axios.
 
 ## Environment
-- Vite base path is `/dashboard/` (see `vite.config.js`).
+- Vite base path is `/tls-manager/` (see `vite.config.js`).
 - API base URL is centralized in `src/services/api.js` and reads `import.meta.env.VITE_API_BASE_URL`.
 
 ## Build & Deploy
-- `vite build` outputs to `./dashboard`.
-- Serve the folder under a path matching `/dashboard/` (e.g., Nginx location or app server context path).
+- `vite build` outputs to `./tls-manager`.
+- Serve the folder under a path matching `/tls-manager/` (e.g., Nginx location or app server context path).
 - If reverse proxying, ensure the base path is preserved for static assets.
 
 ## Security & PKCS#12 handling (design notes)

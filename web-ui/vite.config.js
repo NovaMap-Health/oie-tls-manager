@@ -6,12 +6,12 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/tls-manager/',
+  base: './',
   server: {
-    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0', '778ded44be8d.ngrok-free.app'],
+    allowedHosts: ['localhost', '127.0.0.1', '0.0.0.0'],
     proxy: {
       "/api": {
-        target: "https://oie-test.quantis.health",
+        target: "https://localhost:8443",
         changeOrigin: true,
         secure: true,
       },

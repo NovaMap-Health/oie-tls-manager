@@ -84,13 +84,15 @@ public class TLSWebServiceConfiguration extends DefaultWebServiceConfiguration {
 
     @Override
     public void configureDispatcher(WebServiceDispatcher connector, WebServiceDispatcherProperties connectorProperties, Map<String, Object> requestContext) throws Exception {
+        if (listenerContainer == null) {
+            super.configureDispatcher(connector, connectorProperties, requestContext);
+            return;
+        }
         SSLSocketFactory socketFactory = new SSLSocketFactoryWrapper(
             senderContainer.sslContext().getSocketFactory(),
             senderContainer.protocols(),
             senderContainer.ciphers()
         );
-
-        // Wat?
         requestContext.put("com.sun.xml.internal.ws.transport.https.client.SSLSocketFactory", socketFactory);
         requestContext.put("com.sun.xml.ws.transport.https.client.SSLSocketFactory", socketFactory); // JAX-WS RI
     }
