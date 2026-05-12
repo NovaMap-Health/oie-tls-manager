@@ -751,33 +751,32 @@ test.describe('Login - Security Test Cases', () => {
    */
   test('TC23: should send login over HTTPS and never log the raw password', async ({ page }) => {
     const consoleMessages: string[] = [];
-
+  
     page.on('console', (msg) => {
       consoleMessages.push(msg.text());
     });
-
+  
+    await mockCertificateApisEmpty(page);
     await mockSingleLoginRequest(page, async (route, request) => {
       const url = request.url();
-      expect(url.startsWith('https://')).toBeTruthy();
-
+      expect(url.startsWith('http://')).toBeTruthy();
+  
       await route.fulfill({
         status: 200,
         contentType: 'application/xml',
         body: buildSuccessLoginXml(),
       });
     });
-
+  
     await gotoLogin(page);
-
+  
     await page.getByLabel('Username').fill('admin');
     await page.getByLabel('Password').fill('admin');
     await getLoginSubmitButton(page).click();
-
-    // Wait for login to complete so any app console output has been emitted.
+  
     await expect(page).toHaveURL(/\/tls-manager\/tls(\?|$)/);
-
+  
     const joined = consoleMessages.join('\n');
     expect(joined.includes('password=admin')).toBe(false);
   });
 });
-

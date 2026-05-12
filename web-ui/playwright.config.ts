@@ -13,7 +13,7 @@ export default defineConfig({
   },
   use: {
     // Local dev server URL with the app's base path (trailing slash required for path joining)
-    baseURL: 'https://e1685d618dad.ngrok-free.app/tls-manager',
+    baseURL: 'http://localhost:5173/tls-manager',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -35,7 +35,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'https://e1685d618dad.ngrok-free.app/tls-manager',
+    url: 'http://localhost:5173/tls-manager/',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000, // 2 minutes for server to start
   },
